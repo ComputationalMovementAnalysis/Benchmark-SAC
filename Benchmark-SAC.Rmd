@@ -1,0 +1,50 @@
+---
+title: "Benchmarking Split Apply Combine with sf-Objects"
+output: html_document
+date: '2022-04-22'
+---
+
+
+Benchmarking split-apply-combine with sf objects.
+
+```{r, message=FALSE, warning=FALSE}
+library(readr)
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(microbenchmark)  # <- you might have to install this package first
+                         # using install.packages("microbenchmark")
+```
+
+
+```{r, message=FALSE}
+wildschwein_BE <- readr::read_delim("wildschwein_BE.csv")
+wildschwein_BE_sf <- sf::st_as_sf(wildschwein_BE, 
+                              coords = c("Long", "Lat"), 
+                              crs = 4326)
+
+measurements <- lapply(c(100, 500, 1000, 2000, 5000), function(x){
+  microbenchmark::microbenchmark(
+  wildschwein_BE_sf %>% 
+    dplyr::group_by(TierID) %>%
+    dplyr::sample_n(x) %>%
+    dplyr::summarise(),
+  times = 10
+) %>%
+  dplyr::as_tibble() %>%
+    dplyr::mutate(n = x)
+}) %>%
+  do.call(bind_rows, .)
+
+measurements <- cbind(measurements, as.data.frame(as.list(Sys.info())))
+
+readr::write_csv(measurements, "measurements.csv")
+
+
+ggplot(measurements, aes(n, time, group = n)) + 
+  geom_point() +
+  scale_y_continuous("Nanoseconds",sec.axis = sec_axis(trans = ~.x/1e9, "Seconds"))+
+  scale_x_continuous("Number of Points")
+
+```
+
